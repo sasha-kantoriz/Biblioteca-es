@@ -1,7 +1,8 @@
 from selenium import webdriver
 from time import sleep
 import os
-import pikepdf
+from pathlib import Path
+import fitz
 from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
@@ -10,8 +11,8 @@ from selenium.webdriver.chrome.options import Options
 try:
     os.rename('/home/%s/Downloads' % os.getenv('USERNAME'), '/home/%s/Downloads_backup' % os.getenv('USERNAME'))
 except:
-    os.mkdir('/home/%s/Downloads' % os.getenv('USERNAME'))
-chrome_options = webdriver.ChromeOptions()
+    Path('/home/%s/Downloads' % os.getenv('USERNAME')).mkdir(parents=True, exist_ok=True)
+chrome_options = Options()
 chrome_options.enable_downloads = True
 chrome_options.add_argument("--window-size=1920x1080")
 chrome_options.add_argument("--disable-notifications")
@@ -38,8 +39,8 @@ while retries:
         driver.get('http://bdh.bne.es/bnesearch/Search.do?sort=estrellas_desc&showYearItems=&field=bnesearch&advanced=false&exact=on&textH=&completeText=&text=Destacadas.do&pageNumber=1&pageSize=30&language=')
         element = driver.find_element(By.XPATH, '//*[@id="sort"]')
         if element.is_displayed():
-            element.click()
-            driver.find_element(By.XPATH, '//*[@id="sort"]/option[9]').click()
+            # element.click()
+            # driver.find_element(By.XPATH, '//*[@id="sort"]/option[9]').click()
 
             break
     except (NoSuchElementException, StaleElementReferenceException):
@@ -58,15 +59,6 @@ driver.find_element(By.XPATH, '//*[@id="DerechosFacet"]/ul/li/input').click()
 driver.find_element(By.XPATH, '//*[@id="filtrarButton"]/input').click()
 
 books_list_tab = driver.current_window_handle
-
-def remove_image(page, pdf: pikepdf.Pdf) :
-    image_name, image = next(iter(page.images.items()))
-    new_image = pdf.make_stream(b'\xff')
-    new_image.Width, new_image.Height = 1, 1
-    new_image.BitsPerComponent = 1
-    new_image.ImageMask = True
-    new_image.Decode = [0, 1]
-    page.Resources.XObject[image_name] = new_image
 
 def wait_download():
     try:
@@ -122,30 +114,19 @@ def download_books_per_page(driver: webdriver):
 
         driver.switch_to.window(download_tab)
 
-        driver.find_element(By.XPATH, '//*[@id="viewer"]/div[1]/div[1]/div[2]/img').click()
-        # driver.find_element(By.XPATH, '//*[@id="pdfVolume"]').click()
+        # driver.find_element(By.XPATH, '//*[@id="viewer"]/div[1]/div[1]/div[2]/img').click()
+        driver.find_element(By.XPATH, '//*[@id="viewer"]/div[1]/div[1]/div[3]/img').click()
+        driver.find_element(By.XPATH, '//*[@id="pdfVolume"]').click()
         driver.find_element(By.XPATH, '//*[@id="downloadButton"]').click()
 
         pdf_name = wait_download()
 
-        pdf_file = pikepdf.open('/home/%s/Downloads/%s' % (os.getenv('USERNAME'), pdf_name), allow_overwriting_input=True)
-
-        for page in pdf_file.pages:
-            remove_image(page, pdf_file)
-
-        print(pdf_file.docinfo)
-
-        books_data = ''
-
-        for i in range(len(pdf_file.pages)):
-            breakpoint()
-            books_data += pdf_file.pages[i].extractText()
-
-        pdf_file.save('/home/%s/pdfs_formated/%s' % (os.getenv('USERNAME'), pdf_name))
+        pdf_file = fitz.open('/home/%s/Downloads/%s' % (os.getenv('USERNAME'), pdf_name))
+        book_text = b""
+        for page in pdf_file:
+            book_text += page.get_text().encode('utf-8')
 
         os.remove('/home/%s/Downloads/%s' % (os.getenv('USERNAME'), pdf_name))
-
-        print(books_data)
 
         driver.close()
 
