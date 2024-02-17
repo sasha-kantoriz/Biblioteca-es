@@ -2,16 +2,31 @@ from selenium import webdriver
 from time import sleep
 import os
 from pathlib import Path
+from datetime import datetime
 import fitz
+import fpdf
 from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 from selenium.webdriver.chrome.options import Options
+
+class PDF(fpdf.FPDF):
+    def footer(self):
+        if self.page_no() != 1:
+            # Go to 1.5 cm from bottom
+            self.set_y(-15)
+            self.add_font("dejavu-sans", style="", fname="assets/DejaVuSans.ttf")
+            self.set_font("dejavu-sans", size=12)
+            # Print centered page number
+            self.cell(0, 10, f"{self.page_no()}", 0, 0, 'C')
+
 try:
     os.rename('/home/%s/Downloads' % os.getenv('USERNAME'), '/home/%s/Downloads_backup' % os.getenv('USERNAME'))
 except:
     Path('/home/%s/Downloads' % os.getenv('USERNAME')).mkdir(parents=True, exist_ok=True)
+
+
 chrome_options = Options()
 chrome_options.enable_downloads = True
 chrome_options.add_argument("--window-size=1920x1080")
@@ -31,18 +46,14 @@ chrome_options.add_experimental_option("prefs", {
 
 driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=chrome_options)
 
-driver.switch_to.window(driver.window_handles[0])
-
 retries = 10
 while retries:
     try:
         driver.get('http://bdh.bne.es/bnesearch/Search.do?sort=estrellas_desc&showYearItems=&field=bnesearch&advanced=false&exact=on&textH=&completeText=&text=Destacadas.do&pageNumber=1&pageSize=30&language=')
         element = driver.find_element(By.XPATH, '//*[@id="sort"]')
         if element.is_displayed():
-            # element.click()
-            # driver.find_element(By.XPATH, '//*[@id="sort"]/option[9]').click()
-
             break
+
     except (NoSuchElementException, StaleElementReferenceException):
         if retries <= 0:
             raise
@@ -59,6 +70,7 @@ driver.find_element(By.XPATH, '//*[@id="DerechosFacet"]/ul/li/input').click()
 driver.find_element(By.XPATH, '//*[@id="filtrarButton"]/input').click()
 
 books_list_tab = driver.current_window_handle
+
 
 def wait_download():
     try:
@@ -78,12 +90,13 @@ def wait_download():
         sleep(2)
         return wait_download()
     
-    #knigi menshe 24 ili bolshe 828 ne sohranyaem
 
 def download_books_per_page(driver: webdriver):
     books = driver.find_elements(By.CSS_SELECTOR, "#lista div div.details h2 a")
 
-    for i in range(10):
+    book_id = 1
+
+    for i in range(len(books)):
         book = books[i]
         href = book.get_attribute("href")
 
@@ -99,9 +112,15 @@ def download_books_per_page(driver: webdriver):
         
         driver.switch_to.window(details_tab)
 
-        # print(driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[2]/h1').text)
+        try:
+            title = driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[2]/h1').text
+        except:
+            title = ''
 
-        # print(driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[2]/h2').text)
+        try:
+            author = driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[2]/h2').text
+        except:
+            author = ''
 
         driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[1]/div[1]/a/img').click()
         
@@ -114,43 +133,83 @@ def download_books_per_page(driver: webdriver):
 
         driver.switch_to.window(download_tab)
 
-        # driver.find_element(By.XPATH, '//*[@id="viewer"]/div[1]/div[1]/div[2]/img').click()
-        driver.find_element(By.XPATH, '//*[@id="viewer"]/div[1]/div[1]/div[3]/img').click()
-        driver.find_element(By.XPATH, '//*[@id="pdfVolume"]').click()
+        driver.find_element(By.XPATH, '//*[@id="viewer"]/div[1]/div[1]/div[2]/img').click()
+
+        try:
+            driver.find_element(By.XPATH, '//*[@id="pdfVolume"]').click()
+        except:
+            driver.find_element(By.XPATH, '//*[@id="viewer"]/div[1]/div[1]/div[3]/img').click()
+            driver.find_element(By.XPATH, '//*[@id="pdfVolume"]').click()
+
         driver.find_element(By.XPATH, '//*[@id="downloadButton"]').click()
 
         pdf_name = wait_download()
+
+        folder = '%s/pdfs_formated' % os.getcwd()
+        Path(folder).mkdir(parents=True, exist_ok=True) 
+        currentYear, currentMonth = datetime.now().year, datetime.now().month
+        interior_pdf_fname = f"{currentYear}_{currentMonth}_{book_id}_paperback_interior.pdf"
 
         pdf_file = fitz.open('/home/%s/Downloads/%s' % (os.getenv('USERNAME'), pdf_name))
         book_text = b""
         for page in pdf_file:
             book_text += page.get_text().encode('utf-8')
 
+        book_text = book_text.decode().replace('\n', '')
+
+        pdf = PDF(format=(152.4, 228.6))
+        pdf.add_font("dejavu-sans", style="", fname="assets/DejaVuSans.ttf")
+        # TITLE
+        pdf.add_page()
+        pdf.set_font("dejavu-sans", size=12)
+
+        lines_num = len(pdf.multi_cell(w=0, align='C', padding=(0, 8), text=f"{title}\n\n{author}", dry_run=True, output="LINES"))
+        if lines_num >= 3:
+            padding_top = (228.6 - 24 * (lines_num - 1)) / 2
+        else:
+            padding_top = (228.6 - 24 * (lines_num)) / 2
+        pdf.multi_cell(w=0, align='C', padding=(padding_top, 8, 0), text=f"{title}\n\n{author}")
+        # TEXT
+        pdf.add_page()
+        pdf.set_font("dejavu-sans", size=12)
+        pdf.multi_cell(w=0, h=4.6, align='J', padding=8, text=book_text)
+        #
+        pages = pdf.page_no()
+
+        if pages >= 24 and pages <= 828:
+            pdf.output(f"{folder}/{interior_pdf_fname}")
+            
+
         os.remove('/home/%s/Downloads/%s' % (os.getenv('USERNAME'), pdf_name))
+
+        book_id += 1
 
         driver.close()
 
         driver.switch_to.window(books_list_tab)
 
         books = driver.find_elements(By.CSS_SELECTOR, "#lista div div.details h2 a")
+        if book_id == 100:
+            break
 
+    return book_id
 
 download_books_per_page(driver)
 
-# driver.find_element(By.XPATH, '//*[@id="navsup"]/span[5]/a/img').click()
+driver.find_element(By.XPATH, '//*[@id="navsup"]/span[5]/a/img').click()
 
-#download_books_per_page(driver)
+download_books_per_page(driver)
 
-# driver.find_element(By.XPATH, '//*[@id="navsup"]/span[10]/a/img').click()
+driver.find_element(By.XPATH, '//*[@id="navsup"]/span[10]/a/img').click()
 
-# navsup_element = driver.find_element(By.XPATH, '//*[@id="navsup"]/span[11]/a/img')
+navsup_element = driver.find_element(By.XPATH, '//*[@id="navsup"]/span[11]/a/img')
 
-# try:
-#     while navsup_element.is_displayed():
-#         #download_books_per_page(driver)
-#         navsup_element.click()
-#         navsup_element = driver.find_element(By.XPATH, '//*[@id="navsup"]/span[11]/a/img')
-# except:
-#     breakpoint()
+try:
+    while navsup_element.is_displayed():
+        download_books_per_page(driver)
+        navsup_element.click()
+        navsup_element = driver.find_element(By.XPATH, '//*[@id="navsup"]/span[11]/a/img')
+except:
+    breakpoint()
 
 breakpoint()
