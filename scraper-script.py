@@ -1,6 +1,7 @@
 from selenium import webdriver
 from time import sleep
 import os
+from os.path import expanduser
 from pathlib import Path
 from datetime import datetime
 import fitz
@@ -10,6 +11,10 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 from selenium.webdriver.chrome.options import Options
+
+
+global home
+home = expanduser("~")
 
 class PDF(fpdf.FPDF):
     def footer(self):
@@ -22,9 +27,9 @@ class PDF(fpdf.FPDF):
             self.cell(0, 10, f"{self.page_no()}", 0, 0, 'C')
 
 try:
-    os.rename('/home/%s/Downloads' % os.getenv('USERNAME'), '/home/%s/Downloads_backup' % os.getenv('USERNAME'))
+    os.rename('%s/Downloads' % home, '%s/Downloads_backup' % home)
 except:
-    Path('/home/%s/Downloads' % os.getenv('USERNAME')).mkdir(parents=True, exist_ok=True)
+    Path('%s/Downloads' % home).mkdir(parents=True, exist_ok=True)
 
 
 chrome_options = Options()
@@ -74,11 +79,11 @@ books_list_tab = driver.current_window_handle
 
 def wait_download():
     try:
-        pdfs = os.listdir('/home/%s/Downloads' % os.getenv('USERNAME'))
+        pdfs = os.listdir('%s/Downloads' % home)
 
         while True:
             sleep(1)
-            pdfs = os.listdir('/home/%s/Downloads' % os.getenv('USERNAME'))
+            pdfs = os.listdir('%s/Downloads' % home)
             if pdfs[0].endswith('.crdownload'):
                 print('wait dowload')
             else:
@@ -150,7 +155,7 @@ def download_books_per_page(driver: webdriver):
         currentYear, currentMonth = datetime.now().year, datetime.now().month
         interior_pdf_fname = f"{currentYear}_{currentMonth}_{book_id}_paperback_interior.pdf"
 
-        pdf_file = fitz.open('/home/%s/Downloads/%s' % (os.getenv('USERNAME'), pdf_name))
+        pdf_file = fitz.open('%s/Downloads/%s' % (home, pdf_name))
         book_text = b""
         for page in pdf_file:
             book_text += page.get_text().encode('utf-8')
@@ -180,7 +185,7 @@ def download_books_per_page(driver: webdriver):
             pdf.output(f"{folder}/{interior_pdf_fname}")
             
 
-        os.remove('/home/%s/Downloads/%s' % (os.getenv('USERNAME'), pdf_name))
+        os.remove('%s/Downloads/%s' % home, pdf_name))
 
         book_id += 1
 
@@ -209,7 +214,6 @@ try:
         download_books_per_page(driver)
         navsup_element.click()
         navsup_element = driver.find_element(By.XPATH, '//*[@id="navsup"]/span[11]/a/img')
-except:
-    breakpoint()
-
-breakpoint()
+except Exception as e:
+    print(str(e))
+    
