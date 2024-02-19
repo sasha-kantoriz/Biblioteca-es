@@ -19,3 +19,4 @@ typing_extensions==4.9.0
 urllib3==2.2.0
 webdriver-manager==4.0.1
 wsproto==1.2.0
+pymupdf
