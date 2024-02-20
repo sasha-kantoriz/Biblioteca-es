@@ -185,7 +185,7 @@ def download_books_per_page(driver: webdriver):
             pdf.output(f"{folder}/{interior_pdf_fname}")
             
 
-        os.remove('%s/Downloads/%s' % home, pdf_name))
+        os.remove('%s/Downloads/%s' % (home, pdf_name))
 
         book_id += 1
 
