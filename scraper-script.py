@@ -84,7 +84,7 @@ def wait_download():
         while True:
             sleep(1)
             pdfs = os.listdir('%s/Downloads' % home)
-            if pdfs[0].endswith('.crdownload'):
+            if not pdfs[0].endswith('.pdf'):
                 print('wait dowload')
             else:
                 print('downloaded')
