@@ -27,9 +27,9 @@ class PDF(fpdf.FPDF):
             self.cell(0, 10, f"{self.page_no()}", 0, 0, 'C')
 
 try:
-    os.rename('%s/Downloads' % home, '%s/Downloads_backup' % home)
+    os.rename(f'{home}/Downloads', f'{home}/Downloads_backup-{datetime.now().isoformat()}')
 except:
-    Path('%s/Downloads' % home).mkdir(parents=True, exist_ok=True)
+    Path(f'{home}/Downloads').mkdir(parents=True, exist_ok=True)
 
 
 chrome_options = Options()
@@ -77,23 +77,28 @@ driver.find_element(By.XPATH, '//*[@id="filtrarButton"]/input').click()
 books_list_tab = driver.current_window_handle
 
 
-def wait_download():
-    try:
-        pdfs = os.listdir('%s/Downloads' % home)
+def wait_download(driver, list_tab, details_page):
+    driver.get("chrome://downloads/")
+    for tab in driver.window_handles:
+        if tab not in (list_tab, details_page):
+            driver.switch_to.window(tab)
 
-        while True:
+    while True:
+        try:
+            # get downloaded percentage
+            downloadPercentage = driver.execute_script(
+                "return document.querySelector('downloads-manager').shadowRoot.querySelector('#downloadsList downloads-item').shadowRoot.querySelector('#progress').value")
+            # check if downloadPercentage is 100 (otherwise the script will keep waiting)
+            if downloadPercentage == 100:
+                # return the file name once the download is completed
+                fname = driver.execute_script("return document.querySelector('downloads-manager').shadowRoot.querySelector('#downloadsList downloads-item').shadowRoot.querySelector('div#content  #file-link').text")
+                driver.close()
+                driver.switch_to.window(list_tab)
+                return fname
+        except:
+            print('Downloading book PDF')
             sleep(1)
-            pdfs = os.listdir('%s/Downloads' % home)
-            if not pdfs[0].endswith('.pdf'):
-                print('wait dowload')
-            else:
-                print('downloaded')
-                print(pdfs[0])
 
-                return pdfs[0]
-    except:
-        sleep(2)
-        return wait_download()
     
 
 def download_books_per_page(driver: webdriver):
@@ -148,7 +153,8 @@ def download_books_per_page(driver: webdriver):
 
         driver.find_element(By.XPATH, '//*[@id="downloadButton"]').click()
 
-        pdf_name = wait_download()
+        # breakpoint()
+        pdf_name = wait_download(driver, books_list_tab, details_tab)
 
         folder = '%s/pdfs_formated' % os.getcwd()
         Path(folder).mkdir(parents=True, exist_ok=True) 
@@ -188,10 +194,6 @@ def download_books_per_page(driver: webdriver):
         os.remove('%s/Downloads/%s' % (home, pdf_name))
 
         book_id += 1
-
-        driver.close()
-
-        driver.switch_to.window(books_list_tab)
 
         books = driver.find_elements(By.CSS_SELECTOR, "#lista div div.details h2 a")
         if book_id == 100:
