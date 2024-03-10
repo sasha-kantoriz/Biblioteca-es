@@ -15,7 +15,8 @@ from selenium.common.exceptions import NoSuchElementException, StaleElementRefer
 from selenium.webdriver.chrome.options import Options
 
 
-global home
+global home, book_id
+book_id = 1
 home = expanduser("~")
 client = OpenAI()
 
@@ -96,14 +97,15 @@ books_list_tab = driver.current_window_handle
 
 
 def format_book_text(text):
-    formatted = text\
-        .replace('\n', '')\
-        .replace('[Texto impreso]', '')\
-        .replace('© Biblioteca Nacional de España', '')
+    formatted = text.replace('© Biblioteca Nacional de España', '')
+    formatted = formatted.replace('«', '"').replace('»', '"')
+    formatted = formatted.replace('\n\n\n\n', '\n\n').replace('\n\n\n', '\n\n')
+    formatted = formatted.replace('\n\n', '____').replace('\n', '').replace('____', '\n\n')
     return formatted
 
 
 def generate_book_pdfs(text, url, title, author, language='es'):
+    global book_id
     book_folder = f'{os.getcwd()}/pdfs_formated/{book_id}'
     Path(book_folder).mkdir(parents=True, exist_ok=True)
     currentYear, currentMonth = datetime.now().year, datetime.now().month
@@ -239,6 +241,7 @@ def wait_download(driver, list_tab, details_page):
 
 
 def download_books_per_page(driver: webdriver):
+    global book_id
     books = driver.find_elements(By.CSS_SELECTOR, "#lista div div.details h2 a")
     # Main loop
     for i in range(len(books)):
@@ -258,11 +261,13 @@ def download_books_per_page(driver: webdriver):
 
         try:
             title = driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[2]/h1').text
+            title = title.replace('[Texto impreso]', '')
         except:
             title = ''
 
         try:
-            author = driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[2]/h2').text.split(',')[0]
+            author = driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[2]/h2').text
+            author = author.split(',')[0]
         except:
             author = ''
 
@@ -288,12 +293,16 @@ def download_books_per_page(driver: webdriver):
 
         pdf_name = wait_download(driver, books_list_tab, details_tab)
 
-        pdf_file, book_text = fitz.open(f'{home}/Downloads/{pdf_name}'), b""
+        pdf_file, book_text = fitz.open(f'{home}/Downloads/{pdf_name}'), ""
         for page in pdf_file:
-            book_text += page.get_text().encode('utf-8')
+            blocks = page.get_text('blocks', flags=fitz.TEXT_INHIBIT_SPACES | fitz.TEXT_PRESERVE_LIGATURES | fitz.TEXT_PRESERVE_WHITESPACE | fitz.TEXT_PRESERVE_SPANS | fitz.TEXT_MEDIABOX_CLIP)
+            for b in blocks:
+                book_text += "\n" + b[4]
+
+        pdf_file.close()
 
         # format book text
-        book_text = format_book_text(book_text.decode())
+        book_text = format_book_text(book_text)
 
         # generate PDFs
         generate_book_pdfs(book_text, book_url, title, author)
@@ -305,11 +314,8 @@ def download_books_per_page(driver: webdriver):
 
 
 if __name__ == '__main__':
-    global book_id
-    book_id = 1
     # process first results page
     download_books_per_page(driver)
-    breakpoint()
     # process second results page
     driver.find_element(By.XPATH, '//*[@id="navsup"]/span[5]/a/img').click()
     download_books_per_page(driver)
