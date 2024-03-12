@@ -5,6 +5,7 @@ from openai import OpenAI
 import openpyxl
 from time import sleep
 import os
+import argparse
 from os.path import expanduser
 from pathlib import Path
 from datetime import datetime
@@ -14,11 +15,14 @@ from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 from selenium.webdriver.chrome.options import Options
 
-
 global home
+global book_id
+global start_index 
+global end_index
+
+book_id = 1
 home = expanduser("~")
 client = OpenAI()
-
 
 class PDF(fpdf.FPDF):
     def footer(self):
@@ -93,15 +97,31 @@ driver.find_element(By.XPATH, '//*[@id="DerechosFacet"]/ul/li/input').click()
 driver.find_element(By.XPATH, '//*[@id="filtrarButton"]/input').click()
 
 books_list_tab = driver.current_window_handle
-
+# ==========================================================================
+# text formatting
 
 def format_book_text(text):
-    formatted = text\
-        .replace('\n', '')\
-        .replace('[Texto impreso]', '')\
-        .replace('© Biblioteca Nacional de España', '')
-    return formatted
+    formatted = text.replace('© Biblioteca Nacional de España', '')
+    formatted = formatted.replace('«', '"').replace('»', '"')
+    formatted = formatted.replace('\n\n\n\n', '\n\n').replace('\n\n\n', '\n\n')
+    formatted = formatted.replace('\n\n', '____').replace('\n', '').replace('____', '\n\n')
+    formatted = formatted.replace('*', '')\
+        .replace('/', '')\
+        .replace("\\", '')\
+        .replace('|', '')\
+        .replace('•', '')\
+        .replace('<', '')\
+        .replace('>', '')\
+        .replace('~', '')\
+        .replace('^', '')\
+        .replace('Г', '')\
+        .replace('l', '')\
+        .replace('%', '')\
+        .replace('=', '')\
+        .replace('ϕ', '')
 
+    return formatted
+# ==========================================================================
 
 def generate_book_pdfs(text, url, title, author, language='es'):
     book_folder = f'{os.getcwd()}/pdfs_formated/{book_id}'
@@ -239,86 +259,104 @@ def wait_download(driver, list_tab, details_page):
 
 
 def download_books_per_page(driver: webdriver):
+    global book_id, start_index, end_index
+
     books = driver.find_elements(By.CSS_SELECTOR, "#lista div div.details h2 a")
     # Main loop
     for i in range(len(books)):
         book = books[i]
-        book_url = book.get_attribute("href")
-        driver.execute_script("window.open('%s', '_blank')" % book_url)
+        if end_index and book_id > end_index:
+            return "completed"
+        if start_index <= book_id:
+            book_url = book.get_attribute("href")
+            driver.execute_script("window.open('%s', '_blank')" % book_url)
 
-        details_tab = None
-        download_tab = None
+            details_tab = None
+            download_tab = None
 
-        for tab in driver.window_handles:
-            if tab != books_list_tab:
-                details_tab = tab
-                break
-        
-        driver.switch_to.window(details_tab)
+            for tab in driver.window_handles:
+                if tab != books_list_tab:
+                    details_tab = tab
+                    break
+            
+            driver.switch_to.window(details_tab)
 
-        try:
-            title = driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[2]/h1').text
-        except:
-            title = ''
+            try:
+                title = driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[2]/h1').text
+            except:
+                title = ''
 
-        try:
-            author = driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[2]/h2').text.split(',')[0]
-        except:
-            author = ''
+            try:
+                author = driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[2]/h2').text.split(',')[0]
+            except:
+                author = ''
 
-        driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[1]/div[1]/a/img').click()
-        driver.close()
+            driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[1]/div[1]/a/img').click()
+            driver.close()
 
-        for tab in driver.window_handles:
-            if tab != books_list_tab and tab != details_tab:
-                download_tab = tab
-                break
+            for tab in driver.window_handles:
+                if tab != books_list_tab and tab != details_tab:
+                    download_tab = tab
+                    break
 
-        driver.switch_to.window(download_tab)
+            driver.switch_to.window(download_tab)
 
-        driver.find_element(By.XPATH, '//*[@id="viewer"]/div[1]/div[1]/div[2]/img').click()
+            driver.find_element(By.XPATH, '//*[@id="viewer"]/div[1]/div[1]/div[2]/img').click()
 
-        try:
-            driver.find_element(By.XPATH, '//*[@id="pdfVolume"]').click()
-        except:
-            driver.find_element(By.XPATH, '//*[@id="viewer"]/div[1]/div[1]/div[3]/img').click()
-            driver.find_element(By.XPATH, '//*[@id="pdfVolume"]').click()
+            try:
+                driver.find_element(By.XPATH, '//*[@id="pdfVolume"]').click()
+            except:
+                driver.find_element(By.XPATH, '//*[@id="viewer"]/div[1]/div[1]/div[3]/img').click()
+                driver.find_element(By.XPATH, '//*[@id="pdfVolume"]').click()
 
-        driver.find_element(By.XPATH, '//*[@id="downloadButton"]').click()
+            driver.find_element(By.XPATH, '//*[@id="downloadButton"]').click()
 
-        pdf_name = wait_download(driver, books_list_tab, details_tab)
+            pdf_name = wait_download(driver, books_list_tab, details_tab)
 
-        pdf_file, book_text = fitz.open(f'{home}/Downloads/{pdf_name}'), b""
-        for page in pdf_file:
-            book_text += page.get_text().encode('utf-8')
+            pdf_file, book_text = fitz.open(f'{home}/Downloads/{pdf_name}'), b""
+            for page in pdf_file:
+                book_text += page.get_text().encode('utf-8')
 
-        # format book text
-        book_text = format_book_text(book_text.decode())
+            # format book text
+            book_text = format_book_text(book_text.decode())
 
-        # generate PDFs
-        generate_book_pdfs(book_text, book_url, title, author)
+            # generate PDFs
+            generate_book_pdfs(book_text, book_url, title, author)
 
-        # clear ~/Downloads folder
-        os.remove(f'{home}/Downloads/{pdf_name}')
+            # clear ~/Downloads folder
+            os.remove(f'{home}/Downloads/{pdf_name}')
         book_id += 1
         books = driver.find_elements(By.CSS_SELECTOR, "#lista div div.details h2 a")
 
+    return "success"
+
 
 if __name__ == '__main__':
-    global book_id
-    book_id = 1
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-s","--start_index", help="", type=int, default=0)
+    parser.add_argument("-e","--end_index", help="", type=int, default=None)
+    args = parser.parse_args()
+
+    start_index = args.start_index
+    end_index = args.end_index
+
     # process first results page
-    download_books_per_page(driver)
-    breakpoint()
+    if download_books_per_page(driver) == "completed":
+        wb.save("Project-Biblioteca.xlsx")
+        exit(0)
     # process second results page
     driver.find_element(By.XPATH, '//*[@id="navsup"]/span[5]/a/img').click()
-    download_books_per_page(driver)
+    if download_books_per_page(driver) == "completed":
+        wb.save("Project-Biblioteca.xlsx")
+        exit(0)
     driver.find_element(By.XPATH, '//*[@id="navsup"]/span[10]/a/img').click()
     # process in a loop by pages
     navsup_element = driver.find_element(By.XPATH, '//*[@id="navsup"]/span[11]/a/img')
     try:
         while navsup_element.is_displayed():
-            download_books_per_page(driver)
+            if download_books_per_page(driver) == "completed":
+                wb.save("Project-Biblioteca.xlsx")
+                exit(0)
             navsup_element.click()
             navsup_element = driver.find_element(By.XPATH, '//*[@id="navsup"]/span[11]/a/img')
     except Exception as e:
