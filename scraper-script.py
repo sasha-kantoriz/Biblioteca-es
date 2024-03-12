@@ -82,7 +82,7 @@ def format_book_text(text):
 # ==========================================================================
 
 def generate_book_pdfs(text, url, title, author, language='es'):
-    book_folder = f'{os.getcwd()}/pdfs_formated/{book_id}'
+    book_folder = f'{os.getcwd()}/pdfs_formated'
     Path(book_folder).mkdir(parents=True, exist_ok=True)
     currentYear, currentMonth = datetime.now().year, datetime.now().month
     interior_pdf_fname, cover_pdf_fname = f"{currentYear}_{currentMonth}_{book_id}_paperback_interior.pdf", f"{currentYear}_{currentMonth}_{book_id}_paperback_cover.pdf"
