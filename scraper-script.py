@@ -16,13 +16,14 @@ from selenium.common.exceptions import NoSuchElementException, StaleElementRefer
 from selenium.webdriver.chrome.options import Options
 
 global home
+global client
+global driver
 global book_id
 global start_index 
 global end_index
 
 book_id = 1
 home = expanduser("~")
-client = OpenAI()
 
 class PDF(fpdf.FPDF):
     def footer(self):
@@ -54,49 +55,6 @@ ws.append(["Book ID", "Origin URL", "Title", "Language", \
            "Description", "Keywords", "BISAC codes", \
            "Pages num", "PDF file name", "Cover PDF file name"])
 
-chrome_options = Options()
-chrome_options.enable_downloads = True
-chrome_options.add_argument("--window-size=1920x1080")
-chrome_options.add_argument("--disable-notifications")
-chrome_options.add_argument('--no-sandbox')
-chrome_options.add_argument('--verbose')
-chrome_options.add_argument('--disable-gpu')
-chrome_options.add_argument('--disable-dev-shm-usage')
-chrome_options.add_argument('--disable-software-rasterizer')
-chrome_options.add_experimental_option("prefs", {
-        "download.default_directory": "./downloads/",
-        "download.prompt_for_download": False,
-        "download.directory_upgrade": True,
-        "safebrowsing_for_trusted_sources_enabled": False,
-        "safebrowsing.enabled": False
-})
-
-driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=chrome_options)
-
-retries = 10
-while retries:
-    try:
-        driver.get('http://bdh.bne.es/bnesearch/Search.do?sort=estrellas_desc&showYearItems=&field=bnesearch&advanced=false&exact=on&textH=&completeText=&text=Destacadas.do&pageNumber=1&pageSize=30&language=')
-        element = driver.find_element(By.XPATH, '//*[@id="sort"]')
-        if element.is_displayed():
-            break
-
-    except (NoSuchElementException, StaleElementReferenceException):
-        if retries <= 0:
-            raise
-        else:
-            driver.refresh()
-    retries = retries - 1
-    sleep(4)
-
-driver.find_element(By.XPATH, '//*[@id="MaterialesFacetLink"]').click()
-driver.find_element(By.XPATH, '//*[@id="subMaterialcategory1Check"]').click()
-driver.find_element(By.XPATH, '//*[@id="subMaterialcategory4Check"]').click()
-driver.find_element(By.XPATH, '//*[@id="DerechosFacetLink"]').click()
-driver.find_element(By.XPATH, '//*[@id="DerechosFacet"]/ul/li/input').click()
-driver.find_element(By.XPATH, '//*[@id="filtrarButton"]/input').click()
-
-books_list_tab = driver.current_window_handle
 # ==========================================================================
 # text formatting
 
@@ -339,6 +297,54 @@ if __name__ == '__main__':
 
     start_index = args.start_index
     end_index = args.end_index
+
+    client = OpenAI()
+
+    chrome_options = Options()
+    chrome_options.enable_downloads = True
+    chrome_options.add_argument("--window-size=1920x1080")
+    chrome_options.add_argument("--disable-notifications")
+    chrome_options.add_argument('--no-sandbox')
+    chrome_options.add_argument('--verbose')
+    chrome_options.add_argument('--disable-gpu')
+    chrome_options.add_argument('--disable-dev-shm-usage')
+    chrome_options.add_argument('--disable-software-rasterizer')
+    chrome_options.add_experimental_option("prefs", {
+        "download.default_directory": "./downloads/",
+        "download.prompt_for_download": False,
+        "download.directory_upgrade": True,
+        "safebrowsing_for_trusted_sources_enabled": False,
+        "safebrowsing.enabled": False
+    })
+
+    driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=chrome_options)
+
+    retries = 10
+    while retries:
+        try:
+            driver.get(
+                'http://bdh.bne.es/bnesearch/Search.do?sort=estrellas_desc&showYearItems=&field=bnesearch&advanced=false&exact=on&textH=&completeText=&text=Destacadas.do&pageNumber=1&pageSize=30&language=')
+            element = driver.find_element(By.XPATH, '//*[@id="sort"]')
+            if element.is_displayed():
+                break
+
+        except (NoSuchElementException, StaleElementReferenceException):
+            if retries <= 0:
+                raise
+            else:
+                driver.refresh()
+        retries = retries - 1
+        sleep(4)
+
+    driver.find_element(By.XPATH, '//*[@id="MaterialesFacetLink"]').click()
+    driver.find_element(By.XPATH, '//*[@id="subMaterialcategory1Check"]').click()
+    driver.find_element(By.XPATH, '//*[@id="subMaterialcategory4Check"]').click()
+    driver.find_element(By.XPATH, '//*[@id="DerechosFacetLink"]').click()
+    driver.find_element(By.XPATH, '//*[@id="DerechosFacet"]/ul/li/input').click()
+    driver.find_element(By.XPATH, '//*[@id="filtrarButton"]/input').click()
+
+    books_list_tab = driver.current_window_handle
+
 
     # process first results page
     if download_books_per_page(driver) == "completed":
