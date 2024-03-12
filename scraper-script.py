@@ -1,4 +1,5 @@
 from selenium import webdriver
+import re
 import fitz
 import fpdf
 from openai import OpenAI
@@ -67,17 +68,49 @@ def format_book_text(text):
         .replace('/', '')\
         .replace("\\", '')\
         .replace('|', '')\
+        .replace('¿', '')\
         .replace('•', '')\
         .replace('<', '')\
         .replace('>', '')\
         .replace('~', '')\
         .replace('^', '')\
         .replace('Г', '')\
-        .replace('l', '')\
         .replace('%', '')\
         .replace('=', '')\
-        .replace('ϕ', '')
-
+        .replace('$', '')\
+        .replace('ϕ', '')\
+        .replace(' ,', ',')\
+        .replace(' ;', ';')\
+        .replace(' :', ':')\
+        .replace(' !', '!')\
+        .replace(' ?', '?')\
+        .replace(' .', '.')\
+        .replace(' -', '-')\
+        .replace('-;', ';')\
+        .replace('";', ';')\
+        .replace("';", '')\
+        .replace('",', ',')\
+        .replace('-,', ',')\
+        .replace('--,', '-')\
+        .replace('-.', '.')\
+        .replace(';-', ';')\
+        .replace('-.', '.')\
+        .replace('.,', ',')\
+        .replace('.:', ':')\
+        .replace(' ( )', '')
+    # .replace("-'", "'") \
+    # .replace('."', '.')\
+    # - "
+    # regexp for removing dashes inside words
+    formatted = re.sub(r'(\w)-(\w)', r'\1\2', formatted)
+    # regexp for removing dots from beggining of sentences
+    formatted = re.sub(r'\n\.', r'\n', formatted)
+    # regexp for removing dashes from beggining of sentences
+    formatted = re.sub(r'\n-', r'\n', formatted)
+    # regexp for removing commas from beggining of sentences
+    formatted = re.sub(r'\n,', r'\n', formatted)
+    # regexp for removing random? numbers between sentences
+    formatted = re.sub(r'\n\d+\s?\n', r'', formatted)
     return formatted
 # ==========================================================================
 
@@ -241,11 +274,13 @@ def download_books_per_page(driver: webdriver):
 
             try:
                 title = driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[2]/h1').text
+                title = title.replace('[Texto impreso]', '').strip()
             except:
                 title = ''
 
             try:
-                author = driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[2]/h2').text.split(',')[0]
+                author = driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[2]/h2').text
+                author = author.split(',')[0]
             except:
                 author = ''
 
@@ -271,12 +306,19 @@ def download_books_per_page(driver: webdriver):
 
             pdf_name = wait_download(driver, books_list_tab, details_tab)
 
-            pdf_file, book_text = fitz.open(f'{home}/Downloads/{pdf_name}'), b""
+            pdf_file, book_text = fitz.open(f'{home}/Downloads/{pdf_name}'), ""
             for page in pdf_file:
-                book_text += page.get_text().encode('utf-8')
+                book_text += page.get_text()
+
+            pdf_file, book_text = fitz.open(f'{home}/Downloads/{pdf_name}'), ""
+
+            for page in pdf_file:
+                blocks = page.get_text('blocks', flags=fitz.TEXT_INHIBIT_SPACES | fitz.TEXT_PRESERVE_LIGATURES | fitz.TEXT_PRESERVE_WHITESPACE | fitz.TEXT_PRESERVE_SPANS | fitz.TEXT_MEDIABOX_CLIP)
+                for b in blocks:
+                    book_text += "\n" + b[4]
 
             # format book text
-            book_text = format_book_text(book_text.decode())
+            book_text = format_book_text(book_text)
 
             # generate PDFs
             generate_book_pdfs(book_text, book_url, title, author)
