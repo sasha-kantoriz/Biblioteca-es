@@ -15,6 +15,7 @@ from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 from selenium.webdriver.chrome.options import Options
 
+
 global home
 global book_id
 global start_index 
@@ -105,6 +106,7 @@ def format_book_text(text):
     formatted = formatted.replace('«', '"').replace('»', '"')
     formatted = formatted.replace('\n\n\n\n', '\n\n').replace('\n\n\n', '\n\n')
     formatted = formatted.replace('\n\n', '____').replace('\n', '').replace('____', '\n\n')
+
     formatted = formatted.replace('*', '')\
         .replace('/', '')\
         .replace("\\", '')\
@@ -124,6 +126,7 @@ def format_book_text(text):
 # ==========================================================================
 
 def generate_book_pdfs(text, url, title, author, language='es'):
+    global book_id
     book_folder = f'{os.getcwd()}/pdfs_formated/{book_id}'
     Path(book_folder).mkdir(parents=True, exist_ok=True)
     currentYear, currentMonth = datetime.now().year, datetime.now().month
@@ -281,15 +284,17 @@ def download_books_per_page(driver: webdriver):
             
             driver.switch_to.window(details_tab)
 
-            try:
-                title = driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[2]/h1').text
-            except:
-                title = ''
+        try:
+            title = driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[2]/h1').text
+            title = title.replace('[Texto impreso]', '')
+        except:
+            title = ''
 
-            try:
-                author = driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[2]/h2').text.split(',')[0]
-            except:
-                author = ''
+        try:
+            author = driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[2]/h2').text
+            author = author.split(',')[0]
+        except:
+            author = ''
 
             driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[1]/div[1]/a/img').click()
             driver.close()
@@ -313,12 +318,16 @@ def download_books_per_page(driver: webdriver):
 
             pdf_name = wait_download(driver, books_list_tab, details_tab)
 
-            pdf_file, book_text = fitz.open(f'{home}/Downloads/{pdf_name}'), b""
-            for page in pdf_file:
-                book_text += page.get_text().encode('utf-8')
+        pdf_file, book_text = fitz.open(f'{home}/Downloads/{pdf_name}'), ""
+        for page in pdf_file:
+            blocks = page.get_text('blocks', flags=fitz.TEXT_INHIBIT_SPACES | fitz.TEXT_PRESERVE_LIGATURES | fitz.TEXT_PRESERVE_WHITESPACE | fitz.TEXT_PRESERVE_SPANS | fitz.TEXT_MEDIABOX_CLIP)
+            for b in blocks:
+                book_text += "\n" + b[4]
 
-            # format book text
-            book_text = format_book_text(book_text.decode())
+        pdf_file.close()
+
+        # format book text
+        book_text = format_book_text(book_text)
 
             # generate PDFs
             generate_book_pdfs(book_text, book_url, title, author)
@@ -344,6 +353,7 @@ if __name__ == '__main__':
     if download_books_per_page(driver) == "completed":
         wb.save("Project-Biblioteca.xlsx")
         exit(0)
+
     # process second results page
     driver.find_element(By.XPATH, '//*[@id="navsup"]/span[5]/a/img').click()
     if download_books_per_page(driver) == "completed":
