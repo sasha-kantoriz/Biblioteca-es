@@ -51,9 +51,9 @@ except:
     pass
 datestamp = datetime.now().strftime('%Y-%B-%d %H_%M')
 ws = wb.create_sheet(datestamp)
-ws.append(["Book ID", "Origin URL", "Title", "Language", \
-           "Author", "Translator", "Illustrator", \
-           "Description", "Keywords", "BISAC codes", \
+ws.append(["Book ID", "Origin URL", "Title", "Language",
+           "Author", "Translator", "Illustrator",
+           "Description", "Keywords", "BISAC codes",
            "Pages num", "PDF file name", "Cover PDF file name"])
 
 # ==========================================================================
@@ -137,6 +137,10 @@ def generate_book_pdfs(text, url, title, author, language='es'):
     pdf.add_page()
     pdf.set_font("dejavu-sans", size=12)
     pdf.multi_cell(w=0, h=4.6, align='J', padding=8, text=text)
+    # FOOTER
+    pdf.add_font('dejavu-sans', style="", fname="assets/DejaVuSans.ttf")
+    pdf.add_page()
+    pdf.multi_cell(w=0, h=4.6, align='J', padding=8, text="""Este libro incluye imágenes y/o contenidos obtenidos de los fondos de la Biblioteca Nacional de España, disponibles en la Biblioteca Digital Hispánica y la Hemeroteca Digital a través del sitio web bne.es. Estas imágenes y contenidos están en dominio público y se utilizan bajo una licencia de Reconocimiento 4.0 Internacional de Creative Commons. El uso de estas imágenes y contenidos es gratuito y no ha requerido autorización previa, siendo aplicable tanto para fines no comerciales como comerciales y académicos. Al utilizar estas imágenes y contenidos, reconocemos y citamos la procedencia de los mismos como: “Imágenes procedentes de los fondos de la Biblioteca Nacional de España".""")
     # check book size
     pages = pdf.page_no()
     if pages >= 24 and pages <= 828:
