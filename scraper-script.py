@@ -368,9 +368,8 @@ if __name__ == '__main__':
     retries = 10
     while retries:
         try:
-            driver.get(
-                'http://bdh.bne.es/bnesearch/Search.do?sort=estrellas_desc&showYearItems=&field=bnesearch&advanced=false&exact=on&textH=&completeText=&text=Destacadas.do&pageNumber=1&pageSize=30&language=')
-            element = driver.find_element(By.XPATH, '//*[@id="sort"]')
+            driver.get('https://bdh.bne.es/bnesearch/AdvancedSearch.do?showAdvanced=true')
+            element = driver.find_element(By.XPATH, '//*[@id="btn_busqueda_avanzada"]')
             if element.is_displayed():
                 break
 
@@ -382,15 +381,12 @@ if __name__ == '__main__':
         retries = retries - 1
         sleep(4)
 
-    driver.find_element(By.XPATH, '//*[@id="MaterialesFacetLink"]').click()
-    driver.find_element(By.XPATH, '//*[@id="subMaterialcategory1Check"]').click()
-    driver.find_element(By.XPATH, '//*[@id="subMaterialcategory4Check"]').click()
-    driver.find_element(By.XPATH, '//*[@id="DerechosFacetLink"]').click()
-    driver.find_element(By.XPATH, '//*[@id="DerechosFacet"]/ul/li/input').click()
-    driver.find_element(By.XPATH, '//*[@id="filtrarButton"]/input').click()
+    driver.find_element(By.XPATH, '//*[@id="field1"]').click()
+    driver.find_element(By.XPATH, '//*[@id="field1"]/option[12]').click()
+    driver.find_element(By.XPATH, '//*[@id="AdvancedSearch"]/fieldset[6]/div[2]/ul/li[2]/input').click()
+    driver.find_element(By.XPATH, '//*[@id="btn_busqueda_avanzada"]').click()
 
     books_list_tab = driver.current_window_handle
-
 
     # process first results page
     if download_books_per_page(driver) == "completed":
