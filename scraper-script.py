@@ -1,31 +1,41 @@
-from selenium import webdriver
 import re
 import fitz
 import fpdf
-from openai import OpenAI
 import openpyxl
-from time import sleep
+import requests
 import os
 import argparse
+from time import sleep
+from openai import OpenAI
 from os.path import expanduser
 from pathlib import Path
 from datetime import datetime
+from urllib.parse import urlparse
+from urllib.parse import parse_qs
+from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 from selenium.webdriver.chrome.options import Options
 
-global home
+
 global client
 global driver
 global book_id
 global start_index 
 global end_index
+global outdir
 
 book_id = 1
-home = expanduser("~")
+outdir = datetime.now().strftime('%Y-%B-%d')
+Path(outdir).mkdir(parents=True, exist_ok=True)
+Path(f'{outdir}/interior').mkdir(parents=True, exist_ok=True)
+Path(f'{outdir}/cover').mkdir(parents=True, exist_ok=True)
 
+
+# ==========================================================================
+# PDF
 class PDF(fpdf.FPDF):
     def footer(self):
         if self.page_no() != 1:
@@ -36,11 +46,10 @@ class PDF(fpdf.FPDF):
             # Print centered page number
             self.cell(0, 10, f"{self.page_no()}", 0, 0, 'C')
 
-try:
-    os.rename(f'{home}/Downloads', f'{home}/Downloads_backup-{datetime.now().isoformat()}')
-except:
-    Path(f'{home}/Downloads').mkdir(parents=True, exist_ok=True)
 
+# ==========================================================================
+# EXCEL
+# ==========================================================================
 try:
     wb = openpyxl.load_workbook('Project-Biblioteca.xlsx')
 except:
@@ -56,11 +65,11 @@ ws.append(["Book ID", "Origin URL", "Title", "Language",
            "Description", "Keywords", "BISAC codes",
            "Pages num", "PDF file name", "Cover PDF file name"])
 
+
 # ==========================================================================
 # text formatting
-
 def format_book_text(text):
-    formatted = text.replace('© Biblioteca Nacional de España', '')
+    formatted = text.replace('©', '').replace('Biblioteca Nacional de España', '')
     formatted = formatted.replace('«', '"').replace('»', '"')
     formatted = formatted.replace('\n\n\n\n', '\n\n').replace('\n\n\n', '\n\n')
     formatted = formatted.replace('\n\n', '____').replace('\n', '').replace('____', '\n\n')
@@ -114,11 +123,10 @@ def format_book_text(text):
     return formatted
 # ==========================================================================
 
+
 def generate_book_pdfs(text, url, title, author, language='es'):
-    book_folder = f'{os.getcwd()}/pdfs_formated'
-    Path(book_folder).mkdir(parents=True, exist_ok=True)
-    currentYear, currentMonth = datetime.now().year, datetime.now().month
-    interior_pdf_fname, cover_pdf_fname = f"{currentYear}_{currentMonth}_{book_id}_paperback_interior.pdf", f"{currentYear}_{currentMonth}_{book_id}_paperback_cover.pdf"
+    global outdir
+    interior_pdf_fname, cover_pdf_fname = f"{book_id}_paperback_interior.pdf", f"{book_id}_paperback_cover.pdf"
     # Interior
     pdf = PDF(format=(152.4, 228.6))
     pdf.add_font("dejavu-sans", style="", fname="assets/DejaVuSans.ttf")
@@ -143,9 +151,9 @@ def generate_book_pdfs(text, url, title, author, language='es'):
     pdf.multi_cell(w=0, h=4.6, align='J', padding=8, text="""Este libro incluye imágenes y/o contenidos obtenidos de los fondos de la Biblioteca Nacional de España, disponibles en la Biblioteca Digital Hispánica y la Hemeroteca Digital a través del sitio web bne.es. Estas imágenes y contenidos están en dominio público y se utilizan bajo una licencia de Reconocimiento 4.0 Internacional de Creative Commons. El uso de estas imágenes y contenidos es gratuito y no ha requerido autorización previa, siendo aplicable tanto para fines no comerciales como comerciales y académicos. Al utilizar estas imágenes y contenidos, reconocemos y citamos la procedencia de los mismos como: “Imágenes procedentes de los fondos de la Biblioteca Nacional de España".""")
     # check book size
     pages = pdf.page_no()
-    if pages >= 24 and pages <= 828:
+    if 24 <= pages <= 828:
         # Render book interior
-        pdf.output(f"{book_folder}/{interior_pdf_fname}")
+        pdf.output(f"{outdir}/interior/{interior_pdf_fname}")
         # BOOK COVER
         cover_width, cover_height = 152.4 * 2 + pages * 0.05720 + 3.175 * 2, 234.95
         pdf = fpdf.FPDF(format=(cover_width, cover_height))
@@ -224,33 +232,10 @@ def generate_book_pdfs(text, url, title, author, language='es'):
         #
         cols.render()
         #
-        pdf.output(f"{book_folder}/{cover_pdf_fname}")
+        pdf.output(f"{outdir}/cover/{cover_pdf_fname}")
         #
         ws.append([book_id, url, title, 'es', author, '', '',
-                   description, keywords, bisac_codes, pages, interior_pdf_fname, cover_pdf_fname])
-
-
-def wait_download(driver, list_tab, details_page):
-    driver.get("chrome://downloads/")
-    for tab in driver.window_handles:
-        if tab not in (list_tab, details_page):
-            driver.switch_to.window(tab)
-
-    while True:
-        try:
-            # get downloaded percentage
-            downloadPercentage = driver.execute_script(
-                "return document.querySelector('downloads-manager').shadowRoot.querySelector('#downloadsList downloads-item').shadowRoot.querySelector('#progress').value")
-            # check if downloadPercentage is 100 (otherwise the script will keep waiting)
-            if downloadPercentage == 100:
-                # return the file name once the download is completed
-                fname = driver.execute_script("return document.querySelector('downloads-manager').shadowRoot.querySelector('#downloadsList downloads-item').shadowRoot.querySelector('div#content  #file-link').text")
-                driver.close()
-                driver.switch_to.window(list_tab)
-                return fname
-        except:
-            print('Downloading book PDF')
-            sleep(1)
+                   description, keywords, bisac_codes, pages, f"{outdir}/interior/{interior_pdf_fname}", f"{outdir}/cover/{cover_pdf_fname}"])
 
 
 def download_books_per_page(driver: webdriver):
@@ -260,75 +245,54 @@ def download_books_per_page(driver: webdriver):
     # Main loop
     for i in range(len(books)):
         book = books[i]
+        #
         if end_index and book_id > end_index:
             return "completed"
+        #
         if start_index <= book_id:
+            book_download_url = "https://bdh-rd.bne.es/high.raw?id={_id}&name=00000001.original.pdf&view=main&lang=es"
             book_url = book.get_attribute("href")
             driver.execute_script("window.open('%s', '_blank')" % book_url)
-
+            #
             details_tab = None
-            download_tab = None
-
             for tab in driver.window_handles:
                 if tab != books_list_tab:
                     details_tab = tab
                     break
-            
             driver.switch_to.window(details_tab)
-
+            #
             try:
                 title = driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[2]/h1').text
                 title = title.replace('[Texto impreso]', '').strip()
             except:
                 title = ''
-
             try:
                 author = driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[2]/h2').text
                 author = author.split(',')[0]
             except:
                 author = ''
-
-            driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[1]/div[1]/a/img').click()
+            #
+            download_link_element = driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[1]/div[2]/a')
+            download_link = download_link_element.get_attribute('href')
+            parsed_url = urlparse(download_link)
+            captured_id = parse_qs(parsed_url.query)['id'][0]
+            r = requests.get(book_download_url.format(_id=captured_id), verify=False)
+            with open(f'tmp/{book_id}.pdf', 'wb') as f:
+                f.write(r.content)
+            #
             driver.close()
-
-            for tab in driver.window_handles:
-                if tab != books_list_tab and tab != details_tab:
-                    download_tab = tab
-                    break
-
-            driver.switch_to.window(download_tab)
-
-            driver.find_element(By.XPATH, '//*[@id="viewer"]/div[1]/div[1]/div[2]/img').click()
-
-            try:
-                driver.find_element(By.XPATH, '//*[@id="pdfVolume"]').click()
-            except:
-                driver.find_element(By.XPATH, '//*[@id="viewer"]/div[1]/div[1]/div[3]/img').click()
-                driver.find_element(By.XPATH, '//*[@id="pdfVolume"]').click()
-
-            driver.find_element(By.XPATH, '//*[@id="downloadButton"]').click()
-
-            pdf_name = wait_download(driver, books_list_tab, details_tab)
-
-            pdf_file, book_text = fitz.open(f'{home}/Downloads/{pdf_name}'), ""
-            for page in pdf_file:
-                book_text += page.get_text()
-
-            pdf_file, book_text = fitz.open(f'{home}/Downloads/{pdf_name}'), ""
-
+            driver.switch_to.window(books_list_tab)
+            #
+            pdf_file, book_text = fitz.open(f'tmp/{book_id}.pdf'), ""
             for page in pdf_file:
                 blocks = page.get_text('blocks', flags=fitz.TEXT_INHIBIT_SPACES | fitz.TEXT_PRESERVE_LIGATURES | fitz.TEXT_PRESERVE_WHITESPACE | fitz.TEXT_PRESERVE_SPANS | fitz.TEXT_MEDIABOX_CLIP)
                 for b in blocks:
                     book_text += "\n" + b[4]
-
             # format book text
             book_text = format_book_text(book_text)
-
             # generate PDFs
             generate_book_pdfs(book_text, book_url, title, author)
 
-            # clear ~/Downloads folder
-            os.remove(f'{home}/Downloads/{pdf_name}')
         book_id += 1
         books = driver.find_elements(By.CSS_SELECTOR, "#lista div div.details h2 a")
 
@@ -336,16 +300,17 @@ def download_books_per_page(driver: webdriver):
 
 
 if __name__ == '__main__':
+    Path('tmp').mkdir(parents=True, exist_ok=True)
+    #
     parser = argparse.ArgumentParser()
     parser.add_argument("-s","--start_index", help="", type=int, default=0)
     parser.add_argument("-e","--end_index", help="", type=int, default=None)
     args = parser.parse_args()
-
     start_index = args.start_index
     end_index = args.end_index
-
+    #
     client = OpenAI()
-
+    #
     chrome_options = Options()
     chrome_options.enable_downloads = True
     chrome_options.add_argument("--window-size=1920x1080")
@@ -372,7 +337,6 @@ if __name__ == '__main__':
             element = driver.find_element(By.XPATH, '//*[@id="btn_busqueda_avanzada"]')
             if element.is_displayed():
                 break
-
         except (NoSuchElementException, StaleElementReferenceException):
             if retries <= 0:
                 raise
