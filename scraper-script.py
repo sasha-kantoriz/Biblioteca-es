@@ -234,7 +234,7 @@ def generate_book_pdfs(text, url, title, author, language='es'):
         #
         pdf.output(f"{outdir}/cover/{cover_pdf_fname}")
         #
-        ws.append([book_id, url, title, 'es', author, '', '',
+        ws.append([book_id, url, title, language, author, '', '',
                    description, keywords, bisac_codes, pages, f"{outdir}/interior/{interior_pdf_fname}", f"{outdir}/cover/{cover_pdf_fname}"])
 
 
@@ -271,6 +271,21 @@ def download_books_per_page(driver: webdriver):
                 author = author.split(',')[0]
             except:
                 author = ''
+            # Language
+            if title:
+                language_query = f'Please return the language of the following title: "{title}"'
+                language_completion = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": language_query
+                        },
+                    ]
+                )
+                language = language_completion.choices[0].message.content
+            else:
+                language = 'es'
             #
             download_link_element = driver.find_element(By.XPATH, '//*[@id="results"]/div[1]/div/div[1]/div[2]/a')
             download_link = download_link_element.get_attribute('href')
@@ -291,7 +306,7 @@ def download_books_per_page(driver: webdriver):
             # format book text
             book_text = format_book_text(book_text)
             # generate PDFs
-            generate_book_pdfs(book_text, book_url, title, author)
+            generate_book_pdfs(book_text, book_url, title, author, language)
 
         book_id += 1
         books = driver.find_elements(By.CSS_SELECTOR, "#lista div div.details h2 a")
